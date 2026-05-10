@@ -1,0 +1,9 @@
+USE letter_game_db;
+
+ALTER TABLE games AUTO_INCREMENT = 1;
+ALTER TABLE scores AUTO_INCREMENT = 1;
+ALTER TABLE users AUTO_INCREMENT = 1;
+
+ALTER TABLE dictionary_whitelist AUTO_INCREMENT = 1;
+ALTER TABLE dictionary_blacklist AUTO_INCREMENT = 1;
+ALTER TABLE dictionary_audit AUTO_INCREMENT = 1;
