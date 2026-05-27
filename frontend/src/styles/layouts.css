@@ -1,0 +1,129 @@
+.rules-page {
+	min-height: 100vh;
+	padding: var(--space-xl);
+}
+
+.hero-section {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 22rem;
+	gap: var(--space-lg);
+	max-width: var(--container-max-width);
+	margin: 0 auto var(--space-lg);
+	align-items: stretch;
+}
+
+.hero-content {
+	padding: var(--space-2xl);
+	border-radius: var(--radius-xl);
+}
+
+.rules-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--space-md);
+	max-width: var(--container-max-width);
+	margin: 0 auto var(--space-lg);
+}
+
+.invalid-section,
+.flow-section {
+	max-width: var(--container-max-width);
+	margin: 0 auto var(--space-lg);
+	padding: var(--space-lg);
+	border-radius: var(--radius-xl);
+}
+
+.section-header {
+	max-width: 72ch;
+	margin-bottom: var(--space-md);
+}
+
+.invalid-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.85rem;
+}
+
+.flow-list {
+	display: grid;
+	gap: var(--space-sm);
+	margin: 0;
+	padding-left: 1.35rem;
+}
+
+@media (max-width: 980px) {
+	.hero-section,
+	.rules-grid,
+	.invalid-list {
+		grid-template-columns: 1fr;
+	}
+
+	.summary-card {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 620px) {
+	.rules-page {
+		padding: var(--space-md);
+	}
+
+	.hero-content,
+	.invalid-section,
+	.flow-section {
+		padding: 1.25rem;
+	}
+
+	.summary-card {
+		grid-template-columns: 1fr;
+	}
+
+	.primary-link,
+	.secondary-link {
+		width: 100%;
+	}
+}
+
+.home-page {
+	min-height: 100vh;
+	padding: var(--space-xl);
+}
+
+.home-hero {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 22rem;
+	gap: var(--space-lg);
+	max-width: var(--container-max-width);
+	margin: 0 auto var(--space-lg);
+	align-items: stretch;
+}
+
+.home-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: var(--space-md);
+	max-width: var(--container-max-width);
+	margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+	.home-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 980px) {
+	.home-hero {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 620px) {
+	.home-page {
+		padding: var(--space-md);
+	}
+
+	.home-grid {
+		grid-template-columns: 1fr;
+	}
+}

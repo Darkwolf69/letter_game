@@ -1,0 +1,44 @@
+:root {
+	--color-bg-dark: #1f130b;
+	--color-bg-brown: #2b180c;
+	--color-bg-brown-light: #3b2414;
+
+	--color-surface: rgba(255, 248, 232, 0.94);
+	--color-surface-soft: rgba(255, 255, 255, 0.52);
+	--color-surface-warm: rgba(255, 235, 190, 0.9);
+
+	--color-text: #2b1a10;
+	--color-text-strong: #2b1609;
+	--color-text-muted: #513722;
+	--color-text-soft: #715031;
+
+	--color-primary: #8f4d12;
+	--color-primary-hover: #743d0d;
+	--color-primary-text: #fff8e8;
+
+	--color-border: rgba(255, 232, 191, 0.45);
+	--color-border-brown: rgba(132, 75, 24, 0.16);
+	--color-border-primary: rgba(143, 77, 18, 0.35);
+
+	--shadow-card: 0 18px 45px rgba(0, 0, 0, 0.22);
+	--shadow-button: 0 10px 22px rgba(143, 77, 18, 0.32);
+	--shadow-button-hover: 0 14px 28px rgba(143, 77, 18, 0.4);
+
+	--radius-sm: 0.75rem;
+	--radius-md: 1rem;
+	--radius-lg: 1.25rem;
+	--radius-xl: 1.5rem;
+	--radius-pill: 999px;
+
+	--space-xs: 0.5rem;
+	--space-sm: 0.75rem;
+	--space-md: 1rem;
+	--space-lg: 1.5rem;
+	--space-xl: 2rem;
+	--space-2xl: 2.25rem;
+
+	--container-max-width: 1180px;
+
+	--font-main:
+		Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}

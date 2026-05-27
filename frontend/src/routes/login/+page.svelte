@@ -39,7 +39,7 @@
 		Szeretnél kipróbálni egy kreatív szókirakó játékot? Csatlakozz, játssz, kerülj fel a
 		toplistákra.<br />
 		Új vagy itt? Kérlek olvasd el a szabálykönyvet játék előtt (elkészítése folyamatban).
-		<strong>SZABÁLYOK</strong>
+		<a class="secondary-link" href="/rules">Szabályok</a>
 	</p>
 </div>
 
