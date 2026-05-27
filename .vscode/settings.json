@@ -1,0 +1,14 @@
+{
+  "js/ts.validate.enabled": true,
+  "eslint.workingDirectories": [
+    {
+      "directory": "backend",
+      "changeProcessCWD": true
+    }
+  ],
+  "eslint.validate": ["typescript", "javascript"],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "scm.defaultViewMode": "tree"
+}

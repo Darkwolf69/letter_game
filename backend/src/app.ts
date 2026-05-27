@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import passport from "passport";
 import session from "express-session";
 import dotenv from "dotenv";
@@ -7,12 +7,17 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import expressMySQLSession from "express-mysql-session";
 import path from "path";
+import createError from "http-errors";
+import authRoutes from "./routes/auth.ts";
 
-import initializePassport from "./strategies/local-strategy.js";
+import initializePassport from "./strategies/local-strategy.ts";
 
 dotenv.config();
 
 const cookieSecret = process.env.SESSION_SECRET;
+if (!cookieSecret) {
+  throw new Error("SESSION_SECRET is not defined");
+}
 
 const options = {
   host: process.env.MYSQL_HOST,
@@ -35,7 +40,7 @@ app.use(
       maxAge: 60000 * 60,
     },
     store: sessionStore,
-  })
+  }),
 );
 
 sessionStore
@@ -57,7 +62,7 @@ app.use(
   cors({
     origin: `http://localhost:${process.env.FRONTEND_PORT}`,
     credentials: true,
-  })
+  }),
 );
 
 app.use(passport.initialize());
@@ -71,7 +76,7 @@ app.use(function (req, res, next) {
 });
 
 // error handler
-app.use(function (err, req, res, next) {
+app.use(function (err: any, req: Request, res: Response, next: NextFunction) {
   // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get("env") === "development" ? err : {};
