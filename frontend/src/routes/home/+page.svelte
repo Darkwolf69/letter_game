@@ -3,7 +3,7 @@
 	import api from '$lib/api';
 	import { getUserStatus } from '$lib/auth';
 	import { uiIsAuthenticated, uiUserName, uiUserRole } from '$lib/stores/ui';
-	import type { User } from '$lib/types';
+	import type { User } from '$lib/types/types';
 	import { onMount } from 'svelte';
 
 	let user: User | null = $state(null);

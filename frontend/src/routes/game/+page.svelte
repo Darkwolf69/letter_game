@@ -1,22 +1,13 @@
-<script>
-	import { goto } from '$app/navigation';
-	import api from '$lib/api';
-
-	let email = '';
-	let password = '';
-
-	async function game() {
-		if (email == '' || password == '') {
-			alert('Minden mezőt kötelező kitölteni!');
-		} else {
-			await api
-				.post('/login', { email, password })
-				.then((response) => {
-					goto('/home');
-				})
-				.catch((error) => alert('Felhasználónév vagy jelszó nem egyezik!'));
-		}
-	}
+<script lang="ts">
+	import GamePage from '$lib/components/game/GamePage.svelte';
 </script>
 
-<div></div>
+<svelte:head>
+	<title>Játéktér | Játék a Betűkkel</title>
+	<meta
+		name="description"
+		content="A Játék a Betűkkel statikus játéktér felülete táblával, oldalsávval, időzítővel és betűrackkel."
+	/>
+</svelte:head>
+
+<GamePage />
