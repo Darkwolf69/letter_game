@@ -31,10 +31,6 @@
 			alert(`Bejelentkezés sikertelen: ${msg}`);
 		}
 	}
-
-	async function loginWithGoogle() {
-		window.location.href = 'http://localhost:4000/api/auth/google';
-	}
 </script>
 
 <div class="left-pane">
@@ -54,10 +50,6 @@
 		<input type="password" bind:value={password} placeholder="Jelszó" />
 		<input class="btn" type="submit" value="Bejelentkezés" />
 	</form>
-
-	<hr />
-
-	<button class="btn" on:click={loginWithGoogle}>Belépés Google fiókkal</button>
 
 	<hr />
 

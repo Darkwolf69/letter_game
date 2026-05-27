@@ -1,13 +1,17 @@
-<!-- signup page -->
 <script>
 	import { goto } from '$app/navigation';
 	import api from '$lib/api';
 	import { onMount } from 'svelte';
 	import logo from '$lib/assets/sample_logo.png';
+	import { uiClear } from '$lib/stores/ui';
 
 	let username = '';
 	let email = '';
 	let password = '';
+
+	onMount(() => {
+		uiClear();
+	});
 
 	async function signup() {
 		if (username == '' || email == '' || password == '') {
