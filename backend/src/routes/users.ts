@@ -1,9 +1,16 @@
-import express, { Request, Response } from "express";
-var router = express.Router();
+import express from "express";
+import { getUserByName } from "../service.js";
 
-/* GET users listing. */
-router.get("/", function (req: Request, res: Response, next: Function) {
-  res.send("respond with a resource");
+const router = express.Router();
+
+router.get("/", async (req, res) => {
+  if (req.isAuthenticated()) {
+    const username = req.query.username as string;
+    const user = await getUserByName(username);
+    res.json(user);
+  } else {
+    return res.status(401).send({ msg: "Sikertelen azonosítás!" });
+  }
 });
 
-module.exports = router;
+export default router;
