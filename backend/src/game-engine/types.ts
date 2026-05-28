@@ -5,8 +5,15 @@ export type Tile = {
   isJoker: boolean;
 };
 
-export type GameStatus = "CREATED" | "ROUND_ACTIVE" | "FINISHED";
+export type GameStatus =
+  | "CREATED"
+  | "ROUND_ACTIVE"
+  | "ROUND_EVALUATING"
+  | "FINISHED"
+  | "CANCELLED";
+
 export type RoundStatus = "ACTIVE" | "CLOSED";
+
 export type BoardCellSource = "TITLE" | "PLAYER" | "JOKER";
 
 export type BoardCell = {
@@ -19,3 +26,9 @@ export type BoardCell = {
   locked: boolean;
   createdRound: number | null;
 };
+
+export type MoveDirection = "HORIZONTAL" | "VERTICAL";
+
+export type MoveStatus = "DRAFT" | "SUBMITTED" | "ACCEPTED" | "REJECTED";
+
+export type ScoreReason = "MOVE" | "BONUS" | "PENALTY" | "ROUND";

@@ -1,9 +1,14 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { PoolConnection } from "mysql2/promise";
-import { pool } from "../database.js";
+import { pool, getUserById } from "../database.js";
 import { generateRoundTiles } from "../game-engine/generateTiles.js";
 import { createInitialTitleCells } from "../game-engine/initialBoard.js";
-import type { BoardCell, GameStatus, RoundStatus, Tile } from "../game-engine/types.js";
+import type {
+  BoardCell,
+  GameStatus,
+  RoundStatus,
+  Tile,
+} from "../game-engine/types.js";
 
 export class GameRepositoryError extends Error {
   constructor(
@@ -84,7 +89,10 @@ type GameState = {
   boards: Record<number, { cells: BoardCell[] }>;
 };
 
-async function getGameById(gameId: number, connection?: PoolConnection): Promise<GameRow | undefined> {
+async function getGameById(
+  gameId: number,
+  connection?: PoolConnection,
+): Promise<GameRow | undefined> {
   const executor = connection ?? pool;
   const [rows] = await executor.execute<GameRow[]>(
     `SELECT id, status, round, max_rounds, first_user_id, second_user_id, created_at, started_at
@@ -96,7 +104,10 @@ async function getGameById(gameId: number, connection?: PoolConnection): Promise
   return rows[0];
 }
 
-async function assertPlayerInGame(gameId: number, userId: number): Promise<void> {
+async function assertPlayerInGame(
+  gameId: number,
+  userId: number,
+): Promise<void> {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_id
      FROM game_players
@@ -105,11 +116,18 @@ async function assertPlayerInGame(gameId: number, userId: number): Promise<void>
   );
 
   if (rows.length === 0) {
-    throw new GameRepositoryError(403, "A felhasználó nem résztvevője ennek a játéknak.");
+    throw new GameRepositoryError(
+      403,
+      "A felhasználó nem résztvevője ennek a játéknak.",
+    );
   }
 }
 
-async function insertInitialBoard(connection: PoolConnection, gameId: number, userId: number): Promise<void> {
+async function insertInitialBoard(
+  connection: PoolConnection,
+  gameId: number,
+  userId: number,
+): Promise<void> {
   await connection.execute<ResultSetHeader>(
     `INSERT INTO boards (game_id, user_id) VALUES (?, ?)`,
     [gameId, userId],
@@ -138,7 +156,15 @@ async function insertInitialBoard(connection: PoolConnection, gameId: number, us
   }
 }
 
-export async function createGame(firstUserId: number, secondUserId: number): Promise<GameState> {
+export async function createGame(
+  firstUserId: number,
+  secondUserId: number,
+): Promise<GameState> {
+  const secondUser = await getUserById(secondUserId);
+
+  if (!secondUser) {
+    throw new GameRepositoryError(404, "A második játékos nem található.");
+  }
   const connection = await pool.getConnection();
 
   try {
@@ -172,7 +198,10 @@ export async function createGame(firstUserId: number, secondUserId: number): Pro
   }
 }
 
-export async function startGame(gameId: number, userId: number): Promise<GameState> {
+export async function startGame(
+  gameId: number,
+  userId: number,
+): Promise<GameState> {
   const connection = await pool.getConnection();
 
   try {
@@ -191,7 +220,10 @@ export async function startGame(gameId: number, userId: number): Promise<GameSta
     );
 
     if (playerRows.length === 0) {
-      throw new GameRepositoryError(403, "A felhasználó nem résztvevője ennek a játéknak.");
+      throw new GameRepositoryError(
+        403,
+        "A felhasználó nem résztvevője ennek a játéknak.",
+      );
     }
 
     if (game.status === "CREATED") {
@@ -230,7 +262,10 @@ export async function startGame(gameId: number, userId: number): Promise<GameSta
   }
 }
 
-export async function getGameState(gameId: number, userId: number): Promise<GameState> {
+export async function getGameState(
+  gameId: number,
+  userId: number,
+): Promise<GameState> {
   const game = await getGameById(gameId);
 
   if (!game) {
