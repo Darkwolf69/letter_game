@@ -6,6 +6,7 @@ import cors from "cors";
 import expressMySQLSession from "express-mysql-session";
 import createError from "http-errors";
 import authRoutes from "./routes/auth.js";
+import gameRoutes from "./routes/games.js";
 import userRoutes from "./routes/users.js";
 
 import initializePassport from "./strategies/local-strategy.js";
@@ -72,6 +73,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use("/api", authRoutes);
+app.use("/api/games", gameRoutes);
 app.use("/api/users", userRoutes);
 
 app.use(function (req, res, next) {

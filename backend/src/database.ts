@@ -1,9 +1,9 @@
-import mysql, { type ResultSetHeader } from "mysql2";
+import mysql from "mysql2";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const pool = mysql
+export const pool = mysql
   .createPool({
     host: process.env.MYSQL_HOST,
     user: process.env.MYSQL_USER,
@@ -54,7 +54,7 @@ export async function createUser(
 export async function getUserById(id: number) {
   try {
     const [rows] = (await pool.execute(
-      `SELECT username FROM users WHERE id = ?`,
+      `SELECT id, username, email, role FROM users WHERE id = ?`,
       [id],
     )) as any;
     return rows[0];
