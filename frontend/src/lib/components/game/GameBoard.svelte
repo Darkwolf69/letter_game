@@ -4,9 +4,17 @@
 
 	type Props = {
 		board: BoardCellData[][];
+		title?: string;
+		helpText?: string;
+		ownerName?: string;
 	};
 
-	let { board }: Props = $props();
+	let {
+		board,
+		title = 'Forduló kezdete',
+		helpText = 'A piros betűk már a táblán vannak. Ezek később keresztezésre használhatók.',
+		ownerName = 'Saját tábla'
+	}: Props = $props();
 
 	function getColumnCount(boardData: BoardCellData[][]): number {
 		return boardData[0]?.length ?? 17;
@@ -20,13 +28,11 @@
 <section class="game-board-section" aria-label="Saját játéktábla">
 	<div class="game-board-header">
 		<div>
-			<p class="eyebrow">Saját tábla</p>
-			<h1>Forduló kezdete</h1>
+			<p class="eyebrow">{ownerName}</p>
+			<h1>{title}</h1>
 		</div>
 
-		<p class="game-board-help">
-			A piros betűk már a táblán vannak. Ezek később keresztezésre használhatók.
-		</p>
+		<p class="game-board-help">{helpText}</p>
 	</div>
 
 	<div class="game-board-frame">

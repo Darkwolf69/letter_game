@@ -6,7 +6,7 @@
 	<title>Játéktér | Játék a Betűkkel</title>
 	<meta
 		name="description"
-		content="A Játék a Betűkkel statikus játéktér felülete táblával, oldalsávval, időzítővel és betűrackkel."
+		content="Backendhez kötött Játék a Betűkkel játéktér táblával, oldalsávval, időzítővel és betűrackkel."
 	/>
 </svelte:head>
 
