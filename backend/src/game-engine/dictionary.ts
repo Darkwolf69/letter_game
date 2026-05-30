@@ -1,32 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import type { RowDataPacket } from "mysql2";
 import { pool } from "../database.js";
 import type { DictionaryCheckResult } from "./types.js";
 
-type NSpellInstance = {
-  correct(word: string): boolean;
-};
-
-type NSpellFactory = (aff: string, dic: string) => NSpellInstance;
-
 type DictionaryRow = RowDataPacket & {
   word: string;
 };
-
-const require = createRequire(import.meta.url);
-const nspell = require("nspell") as NSpellFactory;
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
 const backendRoot = path.resolve(currentDir, "../..");
 
-const affPath = path.join(backendRoot, "dictionaries", "hu", "hu_HU.aff");
 const dicPath = path.join(backendRoot, "dictionaries", "hu", "hu_HU.dic");
 
-let spellPromise: Promise<NSpellInstance | null> | null = null;
+let hunspellWordSetPromise: Promise<Set<string>> | null = null;
 
 function normalizeWord(word: string): string {
   return word.trim().toLocaleUpperCase("hu-HU");
@@ -36,43 +25,91 @@ function hasValidHungarianCharacters(word: string): boolean {
   return /^[A-ZÁÉÍÓÖŐÚÜŰ]+$/u.test(word);
 }
 
-async function loadSpell(): Promise<NSpellInstance | null> {
-  if (!spellPromise) {
-    spellPromise = Promise.all([
-      fs.readFile(affPath, "utf8"),
-      fs.readFile(dicPath, "utf8"),
-    ])
-      .then(([aff, dic]) => nspell(aff, dic))
+function normalizeDictionaryLine(line: string): string | null {
+  const trimmedLine = line.trim();
+
+  if (trimmedLine.length === 0) {
+    return null;
+  }
+
+  if (/^\d+$/.test(trimmedLine)) {
+    return null;
+  }
+
+  const wordWithoutFlags = trimmedLine.split("/")[0]?.trim();
+
+  if (!wordWithoutFlags) {
+    return null;
+  }
+
+  const normalizedWord = normalizeWord(wordWithoutFlags);
+
+  if (!hasValidHungarianCharacters(normalizedWord)) {
+    return null;
+  }
+
+  return normalizedWord;
+}
+
+async function loadHunspellDictionaryWords(): Promise<Set<string>> {
+  if (!hunspellWordSetPromise) {
+    hunspellWordSetPromise = fs
+      .readFile(dicPath, "utf8")
+      .then((content) => {
+        const words = new Set<string>();
+
+        for (const line of content.split(/\r?\n/u)) {
+          const normalizedWord = normalizeDictionaryLine(line);
+
+          if (normalizedWord) {
+            words.add(normalizedWord);
+          }
+        }
+
+        return words;
+      })
       .catch((error: unknown) => {
-        console.error("A Hunspell szótár nem tölthető be:", error);
-        return null;
+        console.error("A Hunspell .dic szótár nem tölthető be:", error);
+        return new Set<string>();
       });
   }
 
-  return spellPromise;
+  return hunspellWordSetPromise;
 }
 
 async function wordExistsInTable(
-  tableName: "dictionary_whitelist" | "dictionary_blacklist",
+  tableName:
+    | "dictionary_whitelist"
+    | "dictionary_blacklist"
+    | "dictionary_words",
   normalizedWord: string,
 ): Promise<boolean> {
-  const [rows] = await pool.execute<DictionaryRow[]>(
-    `SELECT word FROM ${tableName} WHERE word = ? LIMIT 1`,
-    [normalizedWord],
-  );
+  try {
+    const [rows] = await pool.execute<DictionaryRow[]>(
+      `SELECT word FROM ${tableName} WHERE word = ? LIMIT 1`,
+      [normalizedWord],
+    );
 
-  return rows.length > 0;
+    return rows.length > 0;
+  } catch (error) {
+    console.error(`A ${tableName} tábla nem olvasható:`, error);
+    return false;
+  }
 }
 
 async function insertDictionaryAudit(
   normalizedWord: string,
   result: DictionaryCheckResult["source"],
 ): Promise<void> {
-  await pool.execute(
-    `INSERT INTO dictionary_audit (word, result)
-     VALUES (?, ?)`,
-    [normalizedWord, result],
-  );
+  try {
+    await pool.execute(
+      `INSERT INTO dictionary_audit (word, result)
+       VALUES (?, ?)`,
+      [normalizedWord, result],
+    );
+  } catch (error) {
+    console.error("A dictionary_audit naplózás sikertelen:", error);
+  }
 }
 
 export async function checkDictionaryWord(
@@ -130,30 +167,38 @@ export async function checkDictionaryWord(
     };
   }
 
-  const spell = await loadSpell();
+  const isOwnDictionaryWord = await wordExistsInTable(
+    "dictionary_words",
+    normalizedWord,
+  );
 
-  if (!spell) {
-    await insertDictionaryAudit(normalizedWord, "rejected");
+  if (isOwnDictionaryWord) {
+    await insertDictionaryAudit(normalizedWord, "own_dictionary");
 
     return {
-      accepted: false,
+      accepted: true,
       normalizedWord,
-      source: "rejected",
+      source: "own_dictionary",
     };
   }
 
-  const lowerCaseWord = normalizedWord.toLocaleLowerCase("hu-HU");
-  const accepted =
-    spell.correct(lowerCaseWord) || spell.correct(normalizedWord);
+  const hunspellWords = await loadHunspellDictionaryWords();
 
-  await insertDictionaryAudit(
-    normalizedWord,
-    accepted ? "hunspell" : "rejected",
-  );
+  if (hunspellWords.has(normalizedWord)) {
+    await insertDictionaryAudit(normalizedWord, "hunspell");
+
+    return {
+      accepted: true,
+      normalizedWord,
+      source: "hunspell",
+    };
+  }
+
+  await insertDictionaryAudit(normalizedWord, "rejected");
 
   return {
-    accepted,
+    accepted: false,
     normalizedWord,
-    source: accepted ? "hunspell" : "rejected",
+    source: "rejected",
   };
 }

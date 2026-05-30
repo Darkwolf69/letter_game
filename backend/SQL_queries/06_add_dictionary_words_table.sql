@@ -1,0 +1,10 @@
+USE letter_game_db;
+
+ALTER TABLE dictionary_audit
+  MODIFY result VARCHAR(32) NOT NULL;
+
+CREATE TABLE IF NOT EXISTS dictionary_words (
+  id INTEGER PRIMARY KEY AUTO_INCREMENT,
+  word VARCHAR(128) NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_hungarian_ci;

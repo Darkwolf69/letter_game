@@ -425,6 +425,104 @@ async function assertPlayerInGameWithConnection(
   }
 }
 
+async function validateSubmittedMoveWithConnection(
+  connection: PoolConnection,
+  gameId: number,
+  userId: number,
+  submittedTiles: SubmittedMoveTile[],
+): Promise<{
+  game: GameRow;
+  validation: MoveValidationResult;
+}> {
+  const game = await getGameById(gameId, connection);
+
+  if (!game) {
+    throw new GameRepositoryError(404, "A játék nem található.");
+  }
+
+  await assertPlayerInGameWithConnection(connection, gameId, userId);
+
+  if (game.status !== "ROUND_ACTIVE") {
+    throw new GameRepositoryError(409, "Nincs aktív forduló ebben a játékban.");
+  }
+
+  const [roundRows] = await connection.execute<ActiveRoundRow[]>(
+    `SELECT round_number, status
+     FROM rounds
+     WHERE game_id = ? AND round_number = ? AND status = 'ACTIVE'
+     LIMIT 1`,
+    [gameId, game.round],
+  );
+
+  if (roundRows.length === 0) {
+    throw new GameRepositoryError(409, "Nincs aktív forduló ebben a játékban.");
+  }
+
+  const [existingMoveRows] = await connection.execute<ExistingMoveRow[]>(
+    `SELECT id
+     FROM moves
+     WHERE game_id = ? AND user_id = ? AND round_number = ?
+     LIMIT 1`,
+    [gameId, userId, game.round],
+  );
+
+  if (existingMoveRows.length > 0) {
+    throw new GameRepositoryError(
+      409,
+      "Ebben a fordulóban ez a játékos már véglegesítette a lerakását.",
+    );
+  }
+
+  const [tileRows] = await connection.execute<TileRow[]>(
+    `SELECT tile_id, letter, points, is_joker
+     FROM round_tiles
+     WHERE game_id = ? AND round_number = ?
+     ORDER BY id ASC`,
+    [gameId, game.round],
+  );
+
+  const [cellRows] = await connection.execute<BoardCellRow[]>(
+    `SELECT user_id, x, y, letter, points, is_joker, source, locked, created_round
+     FROM board_cells
+     WHERE game_id = ? AND user_id = ?
+     ORDER BY y ASC, x ASC`,
+    [gameId, userId],
+  );
+
+  const validation = await validateMove({
+    roundNumber: game.round,
+    boardCells: mapBoardRowsToCells(cellRows),
+    roundTiles: mapTileRowsToTiles(tileRows),
+    submittedTiles,
+  });
+
+  return {
+    game,
+    validation,
+  };
+}
+
+export async function validateMoveSubmission(
+  gameId: number,
+  userId: number,
+  submittedTiles: SubmittedMoveTile[],
+): Promise<MoveValidationResult> {
+  const connection = await pool.getConnection();
+
+  try {
+    const { validation } = await validateSubmittedMoveWithConnection(
+      connection,
+      gameId,
+      userId,
+      submittedTiles,
+    );
+
+    return validation;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function submitMove(
   gameId: number,
   userId: number,
@@ -435,73 +533,12 @@ export async function submitMove(
   try {
     await connection.beginTransaction();
 
-    const game = await getGameById(gameId, connection);
-
-    if (!game) {
-      throw new GameRepositoryError(404, "A játék nem található.");
-    }
-
-    await assertPlayerInGameWithConnection(connection, gameId, userId);
-
-    if (game.status !== "ROUND_ACTIVE") {
-      throw new GameRepositoryError(
-        409,
-        "Nincs aktív forduló ebben a játékban.",
-      );
-    }
-
-    const [roundRows] = await connection.execute<ActiveRoundRow[]>(
-      `SELECT round_number, status
-       FROM rounds
-       WHERE game_id = ? AND round_number = ? AND status = 'ACTIVE'
-       LIMIT 1`,
-      [gameId, game.round],
-    );
-
-    if (roundRows.length === 0) {
-      throw new GameRepositoryError(
-        409,
-        "Nincs aktív forduló ebben a játékban.",
-      );
-    }
-
-    const [existingMoveRows] = await connection.execute<ExistingMoveRow[]>(
-      `SELECT id
-       FROM moves
-       WHERE game_id = ? AND user_id = ? AND round_number = ?
-       LIMIT 1`,
-      [gameId, userId, game.round],
-    );
-
-    if (existingMoveRows.length > 0) {
-      throw new GameRepositoryError(
-        409,
-        "Ebben a fordulóban ez a játékos már küldött be lerakást.",
-      );
-    }
-
-    const [tileRows] = await connection.execute<TileRow[]>(
-      `SELECT tile_id, letter, points, is_joker
-       FROM round_tiles
-       WHERE game_id = ? AND round_number = ?
-       ORDER BY id ASC`,
-      [gameId, game.round],
-    );
-
-    const [cellRows] = await connection.execute<BoardCellRow[]>(
-      `SELECT user_id, x, y, letter, points, is_joker, source, locked, created_round
-       FROM board_cells
-       WHERE game_id = ? AND user_id = ?
-       ORDER BY y ASC, x ASC`,
-      [gameId, userId],
-    );
-
-    const validation = await validateMove({
-      roundNumber: game.round,
-      boardCells: mapBoardRowsToCells(cellRows),
-      roundTiles: mapTileRowsToTiles(tileRows),
+    const { game, validation } = await validateSubmittedMoveWithConnection(
+      connection,
+      gameId,
+      userId,
       submittedTiles,
-    });
+    );
 
     if (!validation.valid) {
       await connection.rollback();

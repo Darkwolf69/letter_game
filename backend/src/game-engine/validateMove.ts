@@ -259,6 +259,7 @@ export async function validateMove(
     startX: extractedWord.startX,
     startY: extractedWord.startY,
     score,
+    dictionarySource: dictionaryResult.source,
     submittedTiles: resolvedTiles,
     boardCellsToInsert: createBoardCellsToInsert(
       input.roundNumber,

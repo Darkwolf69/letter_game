@@ -79,6 +79,7 @@ export type DictionaryCheckResult = {
   source:
     | "whitelist"
     | "blacklist"
+    | "own_dictionary"
     | "hunspell"
     | "chars"
     | "too_short"
@@ -115,6 +116,7 @@ export type MoveValidationSuccess = {
   startX: number;
   startY: number;
   score: number;
+  dictionarySource: DictionaryCheckResult["source"];
   submittedTiles: ResolvedMoveTile[];
   boardCellsToInsert: BoardCell[];
 };

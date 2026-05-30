@@ -83,7 +83,13 @@ app.use(function (req, res, next) {
 app.use(function (err: any, req: Request, res: Response, next: NextFunction) {
   console.error(err);
 
-  res.status(err.status || 500).json({
-    message: "Hiba történt a backenden!",
+  const statusCode = err.status || 500;
+
+  res.status(statusCode).json({
+    message:
+      statusCode === 404
+        ? "A keresett backend endpoint nem található."
+        : "Hiba történt a backenden!",
+    detail: process.env.NODE_ENV === "production" ? undefined : err.message,
   });
 });

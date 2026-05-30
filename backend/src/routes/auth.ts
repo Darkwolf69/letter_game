@@ -45,8 +45,8 @@ router.post("/login", (req, res, next) => {
 });
 
 router.get("/me", async (req, res) => {
-  console.log("Session a posts-ban:\n", req.session);
-  console.log("Session id a posts-ban:\n", req.sessionID);
+  console.log("Session az autentikációkor:\n", req.session);
+  console.log("Session id az autentikációkor:\n", req.sessionID);
   req.sessionStore.get(req.session.id, (err, sessionData) => {
     if (err) {
       console.log(err);

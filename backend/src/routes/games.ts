@@ -5,6 +5,7 @@ import {
   GameRepositoryError,
   startGame,
   submitMove,
+  validateMoveSubmission,
 } from "../repositories/gameRepository.js";
 
 const router = express.Router();
@@ -105,6 +106,43 @@ router.get("/:id/state", async (req, res) => {
   try {
     const state = await getGameState(gameId, user.id);
     res.json(state);
+  } catch (error) {
+    handleGameRouteError(error, res);
+  }
+});
+
+router.post("/:id/moves/validate", async (req, res) => {
+  const user = getAuthenticatedUser(req, res);
+  if (!user) {
+    return;
+  }
+
+  const gameId = toPositiveInteger(req.params.id);
+  if (!gameId) {
+    res.status(400).json({ message: "Érvénytelen játékazonosító." });
+    return;
+  }
+
+  if (!Array.isArray(req.body.tiles)) {
+    res.status(400).json({
+      message: "A beküldött ellenőrzés tiles tömböt vár.",
+    });
+    return;
+  }
+
+  try {
+    const result = await validateMoveSubmission(
+      gameId,
+      user.id,
+      req.body.tiles,
+    );
+
+    if (!result.valid) {
+      res.status(400).json(result);
+      return;
+    }
+
+    res.json(result);
   } catch (error) {
     handleGameRouteError(error, res);
   }
