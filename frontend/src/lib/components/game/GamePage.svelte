@@ -6,14 +6,17 @@
 	import GameBoard from './GameBoard.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import TileRack from './TileRack.svelte';
-	import { createGame, getGameState, startGame } from '$lib/services/games';
+	import { createGame, getGameState, startGame, submitMove } from '$lib/services/games';
 	import type {
 		BackendBoardCell,
 		BoardCellData,
 		GameStateResponse,
 		GameStatus,
+		MoveDirection,
 		PlayerData,
 		PlayerStatus,
+		SubmittedMoveTile,
+		SubmitMoveResponse,
 		TileData,
 		TileSource
 	} from '$lib/types/game';
@@ -44,6 +47,19 @@
 		row: number;
 		col: number;
 	};
+
+	type LocalMovePreview =
+		| {
+				ok: true;
+				word: string;
+				direction: MoveDirection;
+				startX: number;
+				startY: number;
+		  }
+		| {
+				ok: false;
+				message: string;
+		  };
 
 	type RectLike = {
 		left: number;
@@ -148,6 +164,10 @@
 	let isRefreshing: boolean = $state(false);
 	let errorMessage: string = $state('');
 	let successMessage: string = $state('');
+	let isSubmittingMove: boolean = $state(false);
+	let lastMoveResult: SubmitMoveResponse | null = $state(null);
+	let submittedMoveGameId: number | null = $state(null);
+	let submittedMoveRound: number | null = $state(null);
 
 	onMount(() => {
 		void initializePage();
@@ -263,11 +283,18 @@
 			name: player.username,
 			score: player.score,
 			isCurrent: player.userId === currentUserId,
-			status: getPlayerStatus(state.game.status)
+			status:
+				player.userId === currentUserId && hasSubmittedRoundForState(state)
+					? 'Kész'
+					: getPlayerStatus(state.game.status)
 		}));
 	}
 
 	function createRackFromState(state: GameStateResponse): TileData[] {
+		if (hasSubmittedRoundForState(state)) {
+			return [];
+		}
+
 		return (
 			state.round?.tiles.map((tile) => ({
 				id: tile.id,
@@ -299,6 +326,18 @@
 		}
 
 		return state.players[0] ?? null;
+	}
+
+	function hasSubmittedRoundForState(state: GameStateResponse): boolean {
+		return submittedMoveGameId === state.game.id && submittedMoveRound === state.game.round;
+	}
+
+	function hasSubmittedCurrentRound(): boolean {
+		if (!gameState) {
+			return false;
+		}
+
+		return hasSubmittedRoundForState(gameState);
 	}
 
 	function applyGameState(state: GameStateResponse): void {
@@ -469,16 +508,212 @@
 	function clearFeedback(): void {
 		errorMessage = '';
 		successMessage = '';
+		lastMoveResult = null;
+	}
+
+	function createSubmittedMoveTiles(): SubmittedMoveTile[] {
+		return placedThisRound.map((tile) => ({
+			tileId: tile.tileId,
+			x: tile.col,
+			y: tile.row,
+			letter: tile.letter
+		}));
+	}
+
+	function hasBoardTile(row: number, col: number): boolean {
+		return Boolean(board[row]?.[col]?.tile);
+	}
+
+	function getBoardTileLetter(row: number, col: number): string | null {
+		return board[row]?.[col]?.tile?.letter ?? null;
+	}
+
+	function detectLocalMoveDirection(): MoveDirection | null {
+		if (placedThisRound.length === 0) {
+			return null;
+		}
+
+		if (placedThisRound.length > 1) {
+			const firstRow = placedThisRound[0].row;
+			const firstCol = placedThisRound[0].col;
+			const sameRow = placedThisRound.every((tile) => tile.row === firstRow);
+			const sameCol = placedThisRound.every((tile) => tile.col === firstCol);
+
+			if (sameRow) {
+				return 'HORIZONTAL';
+			}
+
+			if (sameCol) {
+				return 'VERTICAL';
+			}
+
+			return null;
+		}
+
+		const onlyTile = placedThisRound[0];
+
+		const hasHorizontalNeighbour =
+			hasBoardTile(onlyTile.row, onlyTile.col - 1) || hasBoardTile(onlyTile.row, onlyTile.col + 1);
+
+		const hasVerticalNeighbour =
+			hasBoardTile(onlyTile.row - 1, onlyTile.col) || hasBoardTile(onlyTile.row + 1, onlyTile.col);
+
+		if (hasHorizontalNeighbour && hasVerticalNeighbour) {
+			return null;
+		}
+
+		if (hasVerticalNeighbour) {
+			return 'VERTICAL';
+		}
+
+		return 'HORIZONTAL';
+	}
+
+	function createLocalMovePreview(): LocalMovePreview {
+		if (placedThisRound.length === 0) {
+			return {
+				ok: false,
+				message: 'Nincs lerakott betű, ezért nincs ellenőrizhető szó.'
+			};
+		}
+
+		const lineStatus = getPlacementLineStatus();
+
+		if (!lineStatus.isValid) {
+			return {
+				ok: false,
+				message: lineStatus.text
+			};
+		}
+
+		const direction = detectLocalMoveDirection();
+
+		if (!direction) {
+			return {
+				ok: false,
+				message:
+					'A szó iránya helyileg nem dönthető el egyértelműen. A backend az OK gombnál pontosan ellenőrzi.'
+			};
+		}
+
+		const firstTile = placedThisRound[0];
+		const stepCol = direction === 'HORIZONTAL' ? 1 : 0;
+		const stepRow = direction === 'VERTICAL' ? 1 : 0;
+
+		let startRow = firstTile.row;
+		let startCol = firstTile.col;
+
+		while (hasBoardTile(startRow - stepRow, startCol - stepCol)) {
+			startRow -= stepRow;
+			startCol -= stepCol;
+		}
+
+		const letters: string[] = [];
+		let row = startRow;
+		let col = startCol;
+
+		while (hasBoardTile(row, col)) {
+			const letter = getBoardTileLetter(row, col);
+
+			if (letter) {
+				letters.push(letter);
+			}
+
+			row += stepRow;
+			col += stepCol;
+		}
+
+		if (letters.length < 2) {
+			return {
+				ok: false,
+				message: 'Legalább két betűből álló szót kell kirakni.'
+			};
+		}
+
+		return {
+			ok: true,
+			word: letters.join(''),
+			direction,
+			startX: startCol,
+			startY: startRow
+		};
 	}
 
 	function handleDictionaryCheck(): void {
-		alert('A szótárellenőrzés következő backend feladat lesz: POST /api/dictionary/check.');
+		clearFeedback();
+
+		if (!requireActiveRound()) {
+			return;
+		}
+
+		const preview = createLocalMovePreview();
+
+		if (!preview.ok) {
+			errorMessage = preview.message;
+			return;
+		}
+
+		successMessage = `Szóelőnézet: ${preview.word}. A végső szótár- és szabályellenőrzés az OK gombnál fut backend oldalon.`;
+		message = `Szóelőnézet: ${preview.word}. Irány: ${
+			preview.direction === 'HORIZONTAL' ? 'vízszintes' : 'függőleges'
+		}.`;
 	}
 
-	function handleSubmitMove(): void {
-		alert(
-			'Az OK gomb következő játéklogikai feladat lesz: lerakás beküldése és backend validáció.'
-		);
+	async function handleSubmitMove(): Promise<void> {
+		clearFeedback();
+
+		if (!activeGameId) {
+			errorMessage = 'Előbb hozz létre vagy tölts be egy játékot.';
+			return;
+		}
+
+		if (!requireActiveRound()) {
+			return;
+		}
+
+		if (placedThisRound.length === 0) {
+			errorMessage = 'Nincs beküldhető lerakás.';
+			return;
+		}
+
+		const lineStatus = getPlacementLineStatus();
+
+		if (!lineStatus.isValid) {
+			errorMessage = lineStatus.text;
+			return;
+		}
+
+		const submittedTiles = createSubmittedMoveTiles();
+
+		isSubmittingMove = true;
+
+		try {
+			const submittedGameId = activeGameId;
+			const submittedRound = gameState?.game.round ?? round;
+
+			const result = await submitMove(activeGameId, submittedTiles);
+			lastMoveResult = result;
+
+			if (!result.valid) {
+				errorMessage = result.message;
+				message = `Érvénytelen lerakás: ${result.message}`;
+				return;
+			}
+
+			submittedMoveGameId = submittedGameId;
+			submittedMoveRound = submittedRound;
+
+			const freshState = await getGameState(submittedGameId);
+			applyGameState(freshState);
+
+			lastMoveResult = result;
+			successMessage = `Elfogadott szó: ${result.word}. Pontszám: ${result.score}.`;
+			message = `A backend elfogadta a lerakást: ${result.word}, ${result.score} pont.`;
+		} catch (error) {
+			errorMessage = getErrorMessage(error);
+		} finally {
+			isSubmittingMove = false;
+		}
 	}
 
 	function getErrorMessage(error: unknown): string {
@@ -515,16 +750,23 @@
 	}
 
 	function canMoveTiles(): boolean {
-		return Boolean(gameState?.round && gameState.game.status === 'ROUND_ACTIVE');
+		return Boolean(
+			gameState?.round && gameState.game.status === 'ROUND_ACTIVE' && !hasSubmittedCurrentRound()
+		);
 	}
 
 	function requireActiveRound(): boolean {
-		if (canMoveTiles()) {
-			return true;
+		if (!gameState?.round || gameState.game.status !== 'ROUND_ACTIVE') {
+			errorMessage = 'Betűt csak aktív fordulóban lehet mozgatni.';
+			return false;
 		}
 
-		errorMessage = 'Betűt csak aktív fordulóban lehet mozgatni.';
-		return false;
+		if (hasSubmittedCurrentRound()) {
+			errorMessage = 'Ebben a fordulóban már beküldted a lerakásodat.';
+			return false;
+		}
+
+		return true;
 	}
 
 	function createLockedBoardTilesFromState(state: GameStateResponse): string[] {
@@ -976,6 +1218,14 @@
 
 		return `${placedThisRound.length} betű lerakva ebben a fordulóban. ${status.text}`;
 	}
+
+	function isDictionaryButtonDisabled(): boolean {
+		return !canMoveTiles() || placedThisRound.length === 0;
+	}
+
+	function isSubmitButtonDisabled(): boolean {
+		return isSubmittingMove || !canMoveTiles() || placedThisRound.length === 0;
+	}
 </script>
 
 <main class="game-page">
@@ -1083,6 +1333,9 @@
 				{players}
 				onDictionaryCheck={handleDictionaryCheck}
 				onSubmitMove={handleSubmitMove}
+				dictionaryDisabled={isDictionaryButtonDisabled()}
+				submitDisabled={isSubmitButtonDisabled()}
+				submitLabel={isSubmittingMove ? 'KÜLDÉS...' : 'OK'}
 			/>
 
 			<section class="game-main" aria-label="Játéktábla és betűkészlet">
@@ -1105,6 +1358,9 @@
 					<ActionButtons
 						onDictionaryCheck={handleDictionaryCheck}
 						onSubmitMove={handleSubmitMove}
+						dictionaryDisabled={isDictionaryButtonDisabled()}
+						submitDisabled={isSubmitButtonDisabled()}
+						submitLabel={isSubmittingMove ? 'KÜLDÉS...' : 'OK'}
 					/>
 				</div>
 			</section>
@@ -1139,6 +1395,38 @@
 				<strong>{lockedBoardTiles.length}</strong>
 			</p>
 		</div>
+
+		{#if lastMoveResult}
+			<div
+				class={`move-result-card ${
+					lastMoveResult.valid ? 'move-result-card--success' : 'move-result-card--error'
+				}`}
+			>
+				{#if lastMoveResult.valid}
+					<p>
+						<strong>Elfogadott szó:</strong>
+						{lastMoveResult.word}
+					</p>
+					<p>
+						<strong>Pontszám:</strong>
+						{lastMoveResult.score}
+					</p>
+					<p>
+						<strong>Irány:</strong>
+						{lastMoveResult.direction === 'HORIZONTAL' ? 'vízszintes' : 'függőleges'}
+					</p>
+				{:else}
+					<p>
+						<strong>Elutasítva:</strong>
+						{lastMoveResult.message}
+					</p>
+					<p>
+						<strong>Hibakód:</strong>
+						{lastMoveResult.code}
+					</p>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="placement-panel__actions">
 			<button type="button" onclick={resetLocalPlacements} disabled={placedThisRound.length === 0}>

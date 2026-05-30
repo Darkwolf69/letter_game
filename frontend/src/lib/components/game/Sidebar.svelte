@@ -10,8 +10,12 @@
 		totalRounds: number;
 		timer: number;
 		players: PlayerData[];
-		onDictionaryCheck: () => void;
-		onSubmitMove: () => void;
+		onDictionaryCheck: () => void | Promise<void>;
+		onSubmitMove: () => void | Promise<void>;
+		dictionaryDisabled?: boolean;
+		submitDisabled?: boolean;
+		dictionaryLabel?: string;
+		submitLabel?: string;
 	};
 
 	let {
@@ -21,7 +25,11 @@
 		timer,
 		players,
 		onDictionaryCheck,
-		onSubmitMove
+		onSubmitMove,
+		dictionaryDisabled = false,
+		submitDisabled = false,
+		dictionaryLabel = 'SZÓTÁR',
+		submitLabel = 'OK'
 	}: Props = $props();
 </script>
 
@@ -42,5 +50,12 @@
 
 	<ScorePanel {players} />
 
-	<ActionButtons {onDictionaryCheck} {onSubmitMove} />
+	<ActionButtons
+		{onDictionaryCheck}
+		{onSubmitMove}
+		{dictionaryDisabled}
+		{submitDisabled}
+		{dictionaryLabel}
+		{submitLabel}
+	/>
 </aside>

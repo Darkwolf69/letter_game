@@ -4,3 +4,32 @@
 @import './styles/components.css';
 @import './styles/forms.css';
 @import './styles/game-backend.css';
+
+.move-result-card {
+	margin-top: 1rem;
+	padding: 0.9rem 1rem;
+	border-radius: 0.9rem;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.move-result-card p {
+	margin: 0.25rem 0;
+}
+
+.move-result-card--success {
+	border-color: rgba(80, 200, 120, 0.45);
+	background: rgba(80, 200, 120, 0.12);
+}
+
+.move-result-card--error {
+	border-color: rgba(255, 90, 90, 0.45);
+	background: rgba(255, 90, 90, 0.12);
+}
+
+.game-action-button:disabled,
+.game-control-actions button:disabled,
+.placement-panel__actions button:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
