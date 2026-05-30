@@ -7,13 +7,17 @@
 		title?: string;
 		helpText?: string;
 		ownerName?: string;
+		activeDraggedTileId?: string | null;
+		onCellPointerDown: (cell: BoardCellData, event: PointerEvent) => void;
 	};
 
 	let {
 		board,
 		title = 'Forduló kezdete',
 		helpText = 'A piros betűk már a táblán vannak. Ezek később keresztezésre használhatók.',
-		ownerName = 'Saját tábla'
+		ownerName = 'Saját tábla',
+		activeDraggedTileId = null,
+		onCellPointerDown
 	}: Props = $props();
 
 	function getColumnCount(boardData: BoardCellData[][]): number {
@@ -43,7 +47,7 @@
 		>
 			{#each board as row}
 				{#each row as cell}
-					<BoardCell {cell} />
+					<BoardCell {cell} {activeDraggedTileId} {onCellPointerDown} />
 				{/each}
 			{/each}
 		</div>
