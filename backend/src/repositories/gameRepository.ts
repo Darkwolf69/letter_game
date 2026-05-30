@@ -3,6 +3,11 @@ import type { PoolConnection } from "mysql2/promise";
 import { pool, getUserById } from "../database.js";
 import { generateRoundTiles } from "../game-engine/generateTiles.js";
 import { createInitialTitleCells } from "../game-engine/initialBoard.js";
+import { validateMove } from "../game-engine/validateMove.js";
+import type {
+  MoveValidationResult,
+  SubmittedMoveTile,
+} from "../game-engine/types.js";
 import type {
   BoardCell,
   GameStatus,
@@ -367,4 +372,197 @@ export async function getGameState(
           },
     boards,
   };
+}
+
+type ExistingMoveRow = RowDataPacket & {
+  id: number;
+};
+
+type ActiveRoundRow = RowDataPacket & {
+  round_number: number;
+  status: RoundStatus;
+};
+
+function mapTileRowsToTiles(rows: TileRow[]): Tile[] {
+  return rows.map((tile) => ({
+    id: tile.tile_id,
+    letter: tile.letter,
+    points: tile.points,
+    isJoker: Boolean(tile.is_joker),
+  }));
+}
+
+function mapBoardRowsToCells(rows: BoardCellRow[]): BoardCell[] {
+  return rows.map((cell) => ({
+    x: cell.x,
+    y: cell.y,
+    letter: cell.letter,
+    points: cell.points,
+    isJoker: Boolean(cell.is_joker),
+    source: cell.source,
+    locked: Boolean(cell.locked),
+    createdRound: cell.created_round,
+  }));
+}
+
+async function assertPlayerInGameWithConnection(
+  connection: PoolConnection,
+  gameId: number,
+  userId: number,
+): Promise<void> {
+  const [rows] = await connection.execute<RowDataPacket[]>(
+    `SELECT user_id
+     FROM game_players
+     WHERE game_id = ? AND user_id = ?`,
+    [gameId, userId],
+  );
+
+  if (rows.length === 0) {
+    throw new GameRepositoryError(
+      403,
+      "A felhasználó nem résztvevője ennek a játéknak.",
+    );
+  }
+}
+
+export async function submitMove(
+  gameId: number,
+  userId: number,
+  submittedTiles: SubmittedMoveTile[],
+): Promise<MoveValidationResult & { moveId?: number }> {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const game = await getGameById(gameId, connection);
+
+    if (!game) {
+      throw new GameRepositoryError(404, "A játék nem található.");
+    }
+
+    await assertPlayerInGameWithConnection(connection, gameId, userId);
+
+    if (game.status !== "ROUND_ACTIVE") {
+      throw new GameRepositoryError(
+        409,
+        "Nincs aktív forduló ebben a játékban.",
+      );
+    }
+
+    const [roundRows] = await connection.execute<ActiveRoundRow[]>(
+      `SELECT round_number, status
+       FROM rounds
+       WHERE game_id = ? AND round_number = ? AND status = 'ACTIVE'
+       LIMIT 1`,
+      [gameId, game.round],
+    );
+
+    if (roundRows.length === 0) {
+      throw new GameRepositoryError(
+        409,
+        "Nincs aktív forduló ebben a játékban.",
+      );
+    }
+
+    const [existingMoveRows] = await connection.execute<ExistingMoveRow[]>(
+      `SELECT id
+       FROM moves
+       WHERE game_id = ? AND user_id = ? AND round_number = ?
+       LIMIT 1`,
+      [gameId, userId, game.round],
+    );
+
+    if (existingMoveRows.length > 0) {
+      throw new GameRepositoryError(
+        409,
+        "Ebben a fordulóban ez a játékos már küldött be lerakást.",
+      );
+    }
+
+    const [tileRows] = await connection.execute<TileRow[]>(
+      `SELECT tile_id, letter, points, is_joker
+       FROM round_tiles
+       WHERE game_id = ? AND round_number = ?
+       ORDER BY id ASC`,
+      [gameId, game.round],
+    );
+
+    const [cellRows] = await connection.execute<BoardCellRow[]>(
+      `SELECT user_id, x, y, letter, points, is_joker, source, locked, created_round
+       FROM board_cells
+       WHERE game_id = ? AND user_id = ?
+       ORDER BY y ASC, x ASC`,
+      [gameId, userId],
+    );
+
+    const validation = await validateMove({
+      roundNumber: game.round,
+      boardCells: mapBoardRowsToCells(cellRows),
+      roundTiles: mapTileRowsToTiles(tileRows),
+      submittedTiles,
+    });
+
+    if (!validation.valid) {
+      await connection.rollback();
+      return validation;
+    }
+
+    const [moveResult] = await connection.execute<ResultSetHeader>(
+      `INSERT INTO moves
+       (game_id, user_id, round_number, word, direction, start_x, start_y, score, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACCEPTED')`,
+      [
+        gameId,
+        userId,
+        game.round,
+        validation.word,
+        validation.direction,
+        validation.startX,
+        validation.startY,
+        validation.score,
+      ],
+    );
+
+    const moveId = moveResult.insertId;
+
+    for (const cell of validation.boardCellsToInsert) {
+      await connection.execute<ResultSetHeader>(
+        `INSERT INTO board_cells
+         (game_id, user_id, x, y, letter, points, is_joker, source, locked, created_round)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          gameId,
+          userId,
+          cell.x,
+          cell.y,
+          cell.letter,
+          cell.points,
+          cell.isJoker,
+          cell.source,
+          cell.locked,
+          cell.createdRound,
+        ],
+      );
+    }
+
+    await connection.execute<ResultSetHeader>(
+      `INSERT INTO scores
+       (game_id, user_id, round_number, move_id, score, reason)
+       VALUES (?, ?, ?, ?, ?, 'MOVE')`,
+      [gameId, userId, game.round, moveId, validation.score],
+    );
+
+    await connection.commit();
+
+    return {
+      ...validation,
+      moveId,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
