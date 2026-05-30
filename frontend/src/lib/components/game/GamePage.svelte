@@ -6,10 +6,17 @@
 	import GameBoard from './GameBoard.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import TileRack from './TileRack.svelte';
-	import { createGame, getGameState, startGame, submitMove } from '$lib/services/games';
+	import {
+	createGame,
+	getGameState,
+	startGame,
+	submitMove,
+	validateMoveRules
+} from '$lib/services/games';
 	import type {
 		BackendBoardCell,
 		BoardCellData,
+		DictionaryCheckSource,
 		GameStateResponse,
 		GameStatus,
 		MoveDirection,
@@ -164,7 +171,9 @@
 	let isRefreshing: boolean = $state(false);
 	let errorMessage: string = $state('');
 	let successMessage: string = $state('');
+
 	let isSubmittingMove: boolean = $state(false);
+	let isCheckingMove: boolean = $state(false);
 	let lastMoveResult: SubmitMoveResponse | null = $state(null);
 	let submittedMoveGameId: number | null = $state(null);
 	let submittedMoveRound: number | null = $state(null);
@@ -639,51 +648,103 @@
 		};
 	}
 
-	function handleDictionaryCheck(): void {
-		clearFeedback();
-
-		if (!requireActiveRound()) {
-			return;
+	function getDictionarySourceLabel(source: DictionaryCheckSource): string {
+		if (source === 'whitelist') {
+			return 'saját engedélyezőlista / whitelist';
 		}
 
-		const preview = createLocalMovePreview();
-
-		if (!preview.ok) {
-			errorMessage = preview.message;
-			return;
+		if (source === 'blacklist') {
+			return 'tiltólista / blacklist';
 		}
 
-		successMessage = `Szóelőnézet: ${preview.word}. A végső szótár- és szabályellenőrzés az OK gombnál fut backend oldalon.`;
-		message = `Szóelőnézet: ${preview.word}. Irány: ${
-			preview.direction === 'HORIZONTAL' ? 'vízszintes' : 'függőleges'
-		}.`;
+		if (source === 'own_dictionary') {
+			return 'saját szótár';
+		}
+
+		if (source === 'hunspell') {
+			return 'Hunspell alapszótár';
+		}
+
+		if (source === 'chars') {
+			return 'érvénytelen karakter';
+		}
+
+		if (source === 'too_short') {
+			return 'túl rövid szó';
+		}
+
+		return 'elutasítva';
 	}
 
-	async function handleSubmitMove(): Promise<void> {
-		clearFeedback();
-
+	function assertMoveCanBeChecked(): boolean {
 		if (!activeGameId) {
 			errorMessage = 'Előbb hozz létre vagy tölts be egy játékot.';
-			return;
+			return false;
 		}
 
 		if (!requireActiveRound()) {
-			return;
+			return false;
 		}
 
 		if (placedThisRound.length === 0) {
-			errorMessage = 'Nincs beküldhető lerakás.';
-			return;
+			errorMessage = 'Nincs ellenőrizhető lerakás.';
+			return false;
 		}
 
 		const lineStatus = getPlacementLineStatus();
 
 		if (!lineStatus.isValid) {
 			errorMessage = lineStatus.text;
+			return false;
+		}
+
+		const preview = createLocalMovePreview();
+
+		if (!preview.ok) {
+			errorMessage = preview.message;
+			return false;
+		}
+
+		return true;
+	}
+
+	async function handleDictionaryCheck(): Promise<void> {
+		clearFeedback();
+
+		if (!assertMoveCanBeChecked() || !activeGameId) {
 			return;
 		}
 
-		const submittedTiles = createSubmittedMoveTiles();
+		isCheckingMove = true;
+
+		try {
+			const result = await validateMoveRules(activeGameId, createSubmittedMoveTiles());
+			lastMoveResult = result;
+
+			if (!result.valid) {
+				errorMessage = result.message;
+				message = `A lerakás szabálytalan: ${result.message}`;
+				return;
+			}
+
+			successMessage = `A lerakás szabályos. Szó: ${result.word}. Pontszám: ${
+				result.score
+			}. Szótárforrás: ${getDictionarySourceLabel(result.dictionarySource)}.`;
+
+			message = `A backend teljesen elfogadta a lerakást: ${result.word}, ${result.score} pont. Az OK gombbal véglegesíthető.`;
+		} catch (error) {
+			errorMessage = getErrorMessage(error);
+		} finally {
+			isCheckingMove = false;
+		}
+	}
+
+	async function handleSubmitMove(): Promise<void> {
+		clearFeedback();
+
+		if (!assertMoveCanBeChecked() || !activeGameId) {
+			return;
+		}
 
 		isSubmittingMove = true;
 
@@ -691,12 +752,12 @@
 			const submittedGameId = activeGameId;
 			const submittedRound = gameState?.game.round ?? round;
 
-			const result = await submitMove(activeGameId, submittedTiles);
+			const result = await submitMove(activeGameId, createSubmittedMoveTiles());
 			lastMoveResult = result;
 
 			if (!result.valid) {
 				errorMessage = result.message;
-				message = `Érvénytelen lerakás: ${result.message}`;
+				message = `Nem véglegesíthető: ${result.message}`;
 				return;
 			}
 
@@ -707,8 +768,12 @@
 			applyGameState(freshState);
 
 			lastMoveResult = result;
-			successMessage = `Elfogadott szó: ${result.word}. Pontszám: ${result.score}.`;
-			message = `A backend elfogadta a lerakást: ${result.word}, ${result.score} pont.`;
+
+			successMessage = `Véglegesítve: ${result.word}. Pontszám: ${
+				result.score
+			}. Szótárforrás: ${getDictionarySourceLabel(result.dictionarySource)}.`;
+
+			message = `A forduló lerakása véglegesítve: ${result.word}, ${result.score} pont.`;
 		} catch (error) {
 			errorMessage = getErrorMessage(error);
 		} finally {
@@ -1220,11 +1285,11 @@
 	}
 
 	function isDictionaryButtonDisabled(): boolean {
-		return !canMoveTiles() || placedThisRound.length === 0;
+		return isCheckingMove || isSubmittingMove || !canMoveTiles() || placedThisRound.length === 0;
 	}
 
 	function isSubmitButtonDisabled(): boolean {
-		return isSubmittingMove || !canMoveTiles() || placedThisRound.length === 0;
+		return isSubmittingMove || isCheckingMove || !canMoveTiles() || placedThisRound.length === 0;
 	}
 </script>
 
@@ -1335,7 +1400,8 @@
 				onSubmitMove={handleSubmitMove}
 				dictionaryDisabled={isDictionaryButtonDisabled()}
 				submitDisabled={isSubmitButtonDisabled()}
-				submitLabel={isSubmittingMove ? 'KÜLDÉS...' : 'OK'}
+				dictionaryLabel={isCheckingMove ? 'ELLENŐRZÉS...' : 'SZÓTÁR'}
+				submitLabel={isSubmittingMove ? 'VÉGLEGESÍTÉS...' : 'OK'}
 			/>
 
 			<section class="game-main" aria-label="Játéktábla és betűkészlet">
@@ -1360,7 +1426,8 @@
 						onSubmitMove={handleSubmitMove}
 						dictionaryDisabled={isDictionaryButtonDisabled()}
 						submitDisabled={isSubmitButtonDisabled()}
-						submitLabel={isSubmittingMove ? 'KÜLDÉS...' : 'OK'}
+						dictionaryLabel={isCheckingMove ? 'ELLENŐRZÉS...' : 'SZÓTÁR'}
+						submitLabel={isSubmittingMove ? 'VÉGLEGESÍTÉS...' : 'OK'}
 					/>
 				</div>
 			</section>
@@ -1402,31 +1469,35 @@
 					lastMoveResult.valid ? 'move-result-card--success' : 'move-result-card--error'
 				}`}
 			>
-				{#if lastMoveResult.valid}
-					<p>
-						<strong>Elfogadott szó:</strong>
-						{lastMoveResult.word}
-					</p>
-					<p>
-						<strong>Pontszám:</strong>
-						{lastMoveResult.score}
-					</p>
-					<p>
-						<strong>Irány:</strong>
-						{lastMoveResult.direction === 'HORIZONTAL' ? 'vízszintes' : 'függőleges'}
-					</p>
-				{:else}
-					<p>
-						<strong>Elutasítva:</strong>
-						{lastMoveResult.message}
-					</p>
-					<p>
-						<strong>Hibakód:</strong>
-						{lastMoveResult.code}
-					</p>
-				{/if}
-			</div>
+		{#if lastMoveResult.valid}
+			<p>
+				<strong>Szabályos szó:</strong>
+				{lastMoveResult.word}
+			</p>
+			<p>
+				<strong>Pontszám:</strong>
+				{lastMoveResult.score}
+			</p>
+			<p>
+				<strong>Irány:</strong>
+				{lastMoveResult.direction === 'HORIZONTAL' ? 'vízszintes' : 'függőleges'}
+			</p>
+			<p>
+				<strong>Szótárforrás:</strong>
+				{getDictionarySourceLabel(lastMoveResult.dictionarySource)}
+			</p>
+		{:else}
+			<p>
+				<strong>Szabálytalan lerakás:</strong>
+				{lastMoveResult.message}
+			</p>
+			<p>
+				<strong>Hibakód:</strong>
+				{lastMoveResult.code}
+			</p>
 		{/if}
+	</div>
+{/if}
 
 		<div class="placement-panel__actions">
 			<button type="button" onclick={resetLocalPlacements} disabled={placedThisRound.length === 0}>

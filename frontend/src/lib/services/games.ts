@@ -31,6 +31,25 @@ export async function getGameState(gameId: number): Promise<GameStateResponse> {
 	return response.data;
 }
 
+export async function validateMoveRules(
+	gameId: number,
+	tiles: SubmittedMoveTile[]
+): Promise<SubmitMoveResponse> {
+	const response = await api.post<SubmitMoveResponse | ApiMessageResponse>(
+		`/games/${gameId}/moves/validate`,
+		{ tiles },
+		{
+			validateStatus: (status) => (status >= 200 && status < 300) || status === 400
+		}
+	);
+
+	if (!isSubmitMoveResponse(response.data)) {
+		throw new Error(getApiMessage(response.data));
+	}
+
+	return response.data;
+}
+
 export async function submitMove(
 	gameId: number,
 	tiles: SubmittedMoveTile[]

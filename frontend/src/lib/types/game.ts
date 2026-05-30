@@ -36,6 +36,15 @@ export type BoardCellSource = 'TITLE' | 'PLAYER' | 'JOKER';
 
 export type MoveDirection = 'HORIZONTAL' | 'VERTICAL';
 
+export type DictionaryCheckSource =
+	| 'whitelist'
+	| 'blacklist'
+	| 'own_dictionary'
+	| 'hunspell'
+	| 'chars'
+	| 'too_short'
+	| 'rejected';
+
 export type BackendTile = {
 	id: string;
 	letter: string;
@@ -136,6 +145,7 @@ export type MoveValidationSuccess = {
 	startX: number;
 	startY: number;
 	score: number;
+	dictionarySource: DictionaryCheckSource;
 	submittedTiles: ResolvedMoveTile[];
 	boardCellsToInsert: BackendBoardCell[];
 	moveId?: number;
